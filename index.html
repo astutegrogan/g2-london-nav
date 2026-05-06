@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
+    <title>Car Nav</title>
+    <style>
+      html, body {
+        margin: 0;
+        height: 100%;
+        background: #232323;
+        color: #E5E5E5;
+        font: 14px/1.4 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+        touch-action: manipulation;
+        -webkit-text-size-adjust: 100%;
+        overscroll-behavior: none;
+      }
+      #app {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        box-sizing: border-box;
+      }
+      .screen {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        padding: 16px;
+        overflow: hidden;
+      }
+      .screen.hidden { display: none; }
+      h1 { font-size: 16px; margin: 0 0 12px; color: #9DEBA0; letter-spacing: 0.5px; }
+      input[type=text] {
+        width: 100%;
+        background: #2E2E2E;
+        border: 1px solid #444;
+        color: #E5E5E5;
+        padding: 12px;
+        font-size: 16px;
+        border-radius: 6px;
+        box-sizing: border-box;
+        outline: none;
+      }
+      input[type=text]:focus { border-color: #9DEBA0; }
+      .results { flex: 1; overflow-y: auto; margin-top: 12px; }
+      .result {
+        padding: 12px;
+        border-bottom: 1px solid #333;
+        cursor: pointer;
+      }
+      .result:active { background: #2A2A2A; }
+      .result .name { font-weight: 600; }
+      .result .addr { font-size: 12px; color: #888; margin-top: 2px; }
+      .preview { flex: 1; }
+      .preview .stat { font-size: 14px; color: #888; margin-bottom: 4px; }
+      .preview .val { font-size: 28px; color: #E5E5E5; margin-bottom: 16px; }
+      button {
+        width: 100%;
+        background: #9DEBA0;
+        color: #1A1A1A;
+        border: 0;
+        padding: 16px;
+        font-size: 18px;
+        font-weight: 600;
+        border-radius: 6px;
+        margin-top: 12px;
+        cursor: pointer;
+      }
+      button.secondary { background: #444; color: #E5E5E5; }
+      button.compact { padding: 10px; font-size: 14px; margin-top: 8px; }
+      button:disabled { opacity: 0.5; cursor: default; }
+      .loc-bar { margin-top: 12px; }
+      .loc-status {
+        font-size: 12px;
+        margin-top: 6px;
+        color: #888;
+      }
+      .loc-status.ok { color: #9DEBA0; }
+      .loc-status.warn { color: #E0C070; }
+      .loc-status.err { color: #F08080; }
+      .nav-status {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        font-size: 14px;
+        color: #888;
+      }
+      .err { color: #F08080; font-size: 12px; margin-top: 8px; }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div id="screen-search" class="screen">
+        <h1>WHERE TO?</h1>
+        <input id="dest-input" type="text" placeholder="Search destination" autocomplete="off" />
+        <div class="loc-bar">
+          <button id="loc-btn" class="secondary compact">Pull Current Location</button>
+          <div id="loc-status" class="loc-status warn">Location not yet shared. Tap above to allow.</div>
+        </div>
+        <div id="dest-results" class="results"></div>
+        <div id="dest-err" class="err"></div>
+      </div>
+      <div id="screen-preview" class="screen hidden">
+        <h1>ROUTE</h1>
+        <div class="preview">
+          <div class="stat">DESTINATION</div>
+          <div id="preview-name" class="val"></div>
+          <div class="stat">DISTANCE</div>
+          <div id="preview-dist" class="val"></div>
+          <div class="stat">ETA</div>
+          <div id="preview-eta" class="val"></div>
+        </div>
+        <button id="start-btn">Start Navigation</button>
+        <button id="back-btn" class="secondary">Back</button>
+      </div>
+      <div id="screen-nav" class="screen hidden">
+        <h1>NAVIGATING</h1>
+        <div class="nav-status" id="nav-status">Look at the glasses for turn-by-turn directions.</div>
+        <button id="cancel-btn" class="secondary">End Navigation</button>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

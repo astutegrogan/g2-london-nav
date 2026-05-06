@@ -1,0 +1,4 @@
+-make some even realities app that piggy backs on some api PLUS location data to let me have overlaid navigatino stuff BUT for my car! 
+-this already exists for walking and biking, but we need the equivvelant of waze, google maps, or apple maps UI for driving directions.
+-Id prefer to use WAZE because that's what im most familiar from a user perspective, but idrc what we use so long as we acheive the supreme goal.
+- we shuold use the even realities SDK for this task
