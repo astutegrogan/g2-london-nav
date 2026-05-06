@@ -384,8 +384,6 @@ def handle(key: str) -> Action:
         set_msg("restarting...", duration=2.5, color=C.yellow)
         return "restart"
     elif key in ("q", "\x1b", "\x03"):
-        set_msg("shutting down...", duration=5.0, color=C.red)
-        stop_all()
         return "exit"
     return "continue"
 
@@ -415,9 +413,14 @@ def main() -> int:
             key = read_key()
             if key:
                 result = handle(key)
-                render(frame)
                 if result == "exit":
+                    # Show feedback BEFORE doing the slow stop, so the user
+                    # sees that q registered even if termination takes a beat.
+                    set_msg("shutting down...", duration=5.0, color=C.red)
+                    render(frame)
+                    stop_all()
                     break
+                render(frame)
                 if result == "restart":
                     stop_all()
                     render(frame)
@@ -431,6 +434,10 @@ def main() -> int:
         sys.stdout.write("\033[H\033[J")
         sys.stdout.write(f"{C.dim}Shut down. Bye.{C.reset}\n")
         sys.stdout.flush()
+        # Subprocess finalizers, ctypes job-handle GC, and log-file flushes
+        # have all been seen to delay clean interpreter exit on Windows. We've
+        # already flushed everything we care about, so bail hard.
+        os._exit(0)
     return 0
 
 
