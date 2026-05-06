@@ -50,6 +50,8 @@ echo "VITE_MAPBOX_TOKEN=pk.your_token_here" > .env.local
 python run.py
 ```
 
+![run.py TUI](docs/images/run-interface.png)
+
 Single-key controls:
 - `1` start simulator · `2` start dev server · `3` start both
 - `4` stop both · `5` restart both
