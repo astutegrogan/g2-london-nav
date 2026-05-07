@@ -40,6 +40,12 @@ export class Compass {
     return this.current ?? this.gpsHeading
   }
 
+  headingSource(): 'compass' | 'gps' | 'none' {
+    if (this.current != null) return 'compass'
+    if (this.gpsHeading != null) return 'gps'
+    return 'none'
+  }
+
   private handle = (e: DeviceOrientationEvent) => {
     const wkc = (e as unknown as { webkitCompassHeading?: number }).webkitCompassHeading
     if (typeof wkc === 'number') {

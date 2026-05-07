@@ -34,13 +34,16 @@ if IS_WIN:
     import ctypes
     import ctypes.wintypes as wintypes
 
-DEBUG = os.environ.get("RUN_PY_DEBUG") == "1"
 DEBUG_LOG = LOGS / "run.py.debug.log"
+# Always write a debug log; truncate on each startup. This is small noise but
+# the only way to diagnose Windows process-tree weirdness after the fact.
+try:
+    DEBUG_LOG.write_text("", encoding="utf-8")
+except Exception:
+    pass
 
 
 def dbg(msg: str) -> None:
-    if not DEBUG:
-        return
     try:
         with open(DEBUG_LOG, "a", encoding="utf-8") as f:
             f.write(f"[{time.strftime('%H:%M:%S')}] {msg}\n")
@@ -193,9 +196,15 @@ class Proc:
         # Create the Job Object BEFORE Popen so we can assign immediately. Any
         # descendant the process spawns after assignment is auto-included.
         self._job = _create_kill_job()
+        # CREATE_NO_WINDOW suppresses the npm.cmd console flash — without it,
+        # npm pops its own console window which steals focus from this TUI.
+        # The dev server / simulator (Electron) will still create their own
+        # windows, but at least npm's transient console is gone.
+        creationflags = subprocess.CREATE_NO_WINDOW if IS_WIN else 0
         self.proc = subprocess.Popen(
             cmd, cwd=ROOT,
             stdout=self._log_fh, stderr=subprocess.STDOUT,
+            creationflags=creationflags,
         )
         if IS_WIN:
             assigned = _assign_pid_to_job(self._job, self.proc.pid)
@@ -242,7 +251,7 @@ class Proc:
 
 
 def _kill_tree_windows(pid: int) -> None:
-    """Fallback kill path used only when Job Object assignment failed."""
+    """Fallback kill path used when Job Object assignment failed."""
     ps = (
         "$ErrorActionPreference='SilentlyContinue';"
         "function K($p){"
@@ -267,10 +276,42 @@ def _kill_tree_windows(pid: int) -> None:
         pass
 
 
+PROJECT_TAG = ROOT.name
+
+
+def purge_project_processes() -> None:
+    """Kill any process whose command line references this project folder.
+
+    Catches orphans from a previous run.py that crashed, plus anything our
+    Job Object missed (e.g., a child that broke away from its parent's job
+    via JOB_OBJECT_LIMIT_BREAKAWAY_OK before we could assign it).
+    """
+    if not IS_WIN:
+        return
+    me = os.getpid()
+    cmd = (
+        "$ErrorActionPreference='SilentlyContinue';"
+        f"$tag='{PROJECT_TAG}';"
+        f"$me={me};"
+        "Get-CimInstance Win32_Process | "
+        "Where-Object { $_.CommandLine -and $_.CommandLine -like \"*$tag*\" -and $_.ProcessId -ne $me } | "
+        "ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"
+    )
+    try:
+        subprocess.run(
+            ["powershell", "-NonInteractive", "-NoProfile", "-Command", cmd],
+            check=False, capture_output=True, timeout=10,
+        )
+    except Exception as e:
+        dbg(f"purge_project_processes exception: {e}")
+
+
 sim = Proc("sim", ["npm", "run", "simulate"], LOGS / "sim.log")
 server = Proc("server", ["npm", "run", "dev"], LOGS / "server.log")
 
 ANIM_FRAMES = ["running.  ", "running.. ", "running..."]
+RESTART_FRAMES = ["restarting.  ", "restarting.. ", "restarting..."]
+_restart_active: bool = False
 
 # ─── Transient banner ─────────────────────────────────────────────────────────
 
@@ -317,6 +358,12 @@ def status(p: Proc, frame: int) -> str:
     return f"{C.grey}stopped   {C.reset}"
 
 
+def restart_status(frame: int) -> str:
+    if _restart_active:
+        return f"{C.yellow}{RESTART_FRAMES[frame]}{C.reset}"
+    return ""
+
+
 def render(frame: int) -> None:
     sys.stdout.write("\033[H\033[J")
     out = []
@@ -326,7 +373,7 @@ def render(frame: int) -> None:
     out.append(f"  {C.bold}{C.yellow}2.{C.reset} {button('start server')} {C.dim}│{C.reset}  {status(server, frame)}\n")
     out.append(f"  {C.bold}{C.yellow}3.{C.reset} {button('start all')} {C.dim}│{C.reset}\n")
     out.append(f"  {C.bold}{C.yellow}4.{C.reset} {button('stop all')} {C.dim}│{C.reset}\n")
-    out.append(f"  {C.bold}{C.yellow}5.{C.reset} {button('restart')} {C.dim}│{C.reset}\n")
+    out.append(f"  {C.bold}{C.yellow}5.{C.reset} {button('restart')} {C.dim}│{C.reset}  {restart_status(frame)}\n")
     out.append(f"  {C.bold}{C.yellow}q.{C.reset} {button('quit')} {C.dim}│{C.reset}\n")
     out.append("\n")
     msg = current_msg()
@@ -335,6 +382,7 @@ def render(frame: int) -> None:
     else:
         out.append("\n")
     out.append(f"  {C.dim}logs: {LOGS}{C.reset}\n")
+    out.append(f"  {C.dim}note: click this window to send keys (focus follows simulator on start){C.reset}\n")
     out.append("\n")
     out.append(f"{C.cyan}> {C.reset}")
     sys.stdout.write("".join(out))
@@ -364,6 +412,10 @@ def read_key() -> str | None:
 def stop_all() -> None:
     sim.stop()
     server.stop()
+    # Belt-and-suspenders: kill any leftover process tagged with our project
+    # folder name. Catches orphans from previous run.py instances and anything
+    # that escaped our Job Objects.
+    purge_project_processes()
 
 
 Action = str  # "continue" | "restart" | "exit"
@@ -381,7 +433,8 @@ def handle(key: str) -> Action:
         set_msg("stopping all...", duration=1.8, color=C.red)
         stop_all()
     elif key == "5":
-        set_msg("restarting...", duration=2.5, color=C.yellow)
+        global _restart_active
+        _restart_active = True
         return "restart"
     elif key in ("q", "\x1b", "\x03"):
         return "exit"
@@ -390,7 +443,28 @@ def handle(key: str) -> Action:
 
 # ─── Main loop ────────────────────────────────────────────────────────────────
 
+def _shutdown_async(timeout: float = 4.0) -> None:
+    """Run stop_all in a daemon thread with a hard timeout.
+
+    Any of the kill paths (Job Object termination, PowerShell tree walk,
+    project-tag purge) can in theory hang. Daemon thread + bounded join
+    means q is always honored within `timeout` seconds.
+    """
+    import threading
+    dbg("_shutdown_async starting")
+    t = threading.Thread(target=stop_all, daemon=True)
+    t.start()
+    t.join(timeout=timeout)
+    dbg(f"_shutdown_async done (alive={t.is_alive()})")
+
+
 def main() -> int:
+    global _restart_active
+    dbg(f"main starting (pid={os.getpid()})")
+    # Clean slate: nuke any orphans from previous broken runs before we render.
+    purge_project_processes()
+    dbg("startup purge done")
+
     frame = 0
     last_anim = 0.0
     pending_restart_at: float | None = None
@@ -400,9 +474,11 @@ def main() -> int:
             now = time.monotonic()
 
             if pending_restart_at is not None and now >= pending_restart_at:
+                dbg("pending restart firing")
                 sim.start()
                 server.start()
                 pending_restart_at = None
+                _restart_active = False
                 render(frame)
 
             if now - last_anim >= 0.4:
@@ -412,31 +488,34 @@ def main() -> int:
 
             key = read_key()
             if key:
+                dbg(f"key={key!r}")
                 result = handle(key)
                 if result == "exit":
-                    # Show feedback BEFORE doing the slow stop, so the user
-                    # sees that q registered even if termination takes a beat.
+                    dbg("exit path")
                     set_msg("shutting down...", duration=5.0, color=C.red)
                     render(frame)
-                    stop_all()
+                    _shutdown_async(timeout=4.0)
                     break
                 render(frame)
                 if result == "restart":
-                    stop_all()
+                    dbg("restart path")
+                    _shutdown_async(timeout=4.0)
                     render(frame)
                     pending_restart_at = time.monotonic() + 0.6
 
             time.sleep(0.04)
     except KeyboardInterrupt:
-        pass
+        dbg("KeyboardInterrupt — shutting down")
+        _shutdown_async(timeout=4.0)
     finally:
-        stop_all()
+        # No second un-threaded stop_all here — the threaded shutdown above
+        # already ran. Calling stop_all again here would re-invoke PowerShell
+        # synchronously and could hang, blocking os._exit and making q feel
+        # broken.
         sys.stdout.write("\033[H\033[J")
         sys.stdout.write(f"{C.dim}Shut down. Bye.{C.reset}\n")
         sys.stdout.flush()
-        # Subprocess finalizers, ctypes job-handle GC, and log-file flushes
-        # have all been seen to delay clean interpreter exit on Windows. We've
-        # already flushed everything we care about, so bail hard.
+        dbg("os._exit(0)")
         os._exit(0)
     return 0
 

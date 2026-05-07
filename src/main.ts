@@ -31,6 +31,7 @@ class App {
   private mapInflight = false
   private lastMapHeading: number | null = null
   private lastMapCenter: LngLat | null = null
+  private lastMapModeLabel: string = ''
   private zoomIndex = DEFAULT_ZOOM_INDEX
 
   async boot() {
@@ -189,6 +190,13 @@ class App {
     if (this.mapInflight || !this.lastFix) return
     const center: LngLat = [this.lastFix.lng, this.lastFix.lat]
     const heading = this.compass.heading() ?? 0
+    const source = this.compass.headingSource()
+    const modeLabel = source === 'compass' ? 'mode=compass' : source === 'gps' ? 'mode=heading' : ''
+
+    if (this.lastMapModeLabel !== modeLabel) {
+      void this.surface.update({ modeBadge: modeLabel })
+      this.lastMapModeLabel = modeLabel
+    }
 
     if (this.lastMapCenter && this.lastMapHeading != null) {
       const movedTrivially = haversineMeters(this.lastMapCenter, center) < 5
