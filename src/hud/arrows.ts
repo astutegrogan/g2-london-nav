@@ -1,6 +1,6 @@
-import type { ManeuverModifier, ManeuverType } from '../routing/types'
+import type { ManeuverModifier, ManeuverType, TransitMode } from '../routing/types'
 
-const MAP: Record<string, string> = {
+const WALK_MAP: Record<string, string> = {
   'turn:left': '↰',
   'turn:right': '↱',
   'turn:sharp left': '↰',
@@ -35,7 +35,23 @@ const MAP: Record<string, string> = {
   'end of road:right': '↱',
 }
 
+const TRANSIT_MODE_ICON: Record<TransitMode, string> = {
+  walking: '↑',
+  tube: '[M]',
+  bus: '[B]',
+  overground: '[O]',
+  'elizabeth-line': '[E]',
+  dlr: '[D]',
+  'national-rail': '[R]',
+  'river-bus': '[~]',
+  'cable-car': '[C]',
+}
+
 export function arrowFor(type: ManeuverType, modifier?: ManeuverModifier): string {
   const key = `${type}:${modifier ?? 'straight'}`
-  return MAP[key] ?? MAP[`${type}:straight`] ?? '↑'
+  return WALK_MAP[key] ?? WALK_MAP[`${type}:straight`] ?? '↑'
+}
+
+export function transitIcon(mode: TransitMode): string {
+  return TRANSIT_MODE_ICON[mode] ?? '[?]'
 }

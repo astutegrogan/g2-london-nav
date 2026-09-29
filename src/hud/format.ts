@@ -1,24 +1,7 @@
 export function metersToDisplay(m: number): string {
   if (!Number.isFinite(m)) return '—'
-  const ft = m * 3.28084
-  if (ft < 1000) return `${Math.round(ft / 50) * 50} ft`
-  const mi = m / 1609.344
-  if (mi < 10) return `${mi.toFixed(1)} mi`
-  return `${Math.round(mi)} mi`
-}
-
-export function metersToDisplayShort(m: number): string {
-  if (!Number.isFinite(m)) return '—'
-  const ft = m * 3.28084
-  if (ft < 1000) return `${Math.round(ft / 50) * 50}ft`
-  const mi = m / 1609.344
-  if (mi < 10) return `${mi.toFixed(1)}mi`
-  return `${Math.round(mi)}mi`
-}
-
-export function mpsToMph(mps: number | null): number | null {
-  if (mps == null || !Number.isFinite(mps) || mps < 0) return null
-  return Math.round(mps * 2.23694)
+  if (m < 1000) return `${Math.round(m / 10) * 10} m`
+  return `${(m / 1000).toFixed(1)} km`
 }
 
 export function durationToMin(seconds: number): string {

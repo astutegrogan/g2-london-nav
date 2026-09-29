@@ -1,40 +1,62 @@
 import type { GlassesSurface } from '../sdk'
 import type { TrackerState } from '../routing/tracker'
 import type { Fix } from '../gps'
-import { arrowFor } from './arrows'
-import { eta, durationToMin, metersToDisplay, mpsToMph, truncate } from './format'
+import { arrowFor, transitIcon } from './arrows'
+import { eta, durationToMin, metersToDisplay, truncate } from './format'
 
 export interface HudInputs {
   state: TrackerState
   fix: Fix | null
 }
 
-export function buildFrame({ state, fix }: HudInputs): Record<string, string> {
-  const arrow = arrowFor(state.currentStep.maneuver.type, state.currentStep.maneuver.modifier)
-  const street = truncate(state.currentStep.name || state.currentStep.maneuver.instruction, 28)
-
-  const speed = mpsToMph(fix?.speedMps ?? null)
-  const limit = state.speedLimitMph
-  const speedField = speed == null ? '' : limit == null ? `${speed} mph` : `${speed}/${limit} mph`
+export function buildFrame({ state }: HudInputs): Record<string, string> {
+  const { currentStep, nextStep } = state
 
   const header = [
     eta(state.durationRemaining),
     durationToMin(state.durationRemaining),
     metersToDisplay(state.distanceRemaining),
-    speedField,
-  ]
-    .filter(s => s.length > 0)
-    .join(' · ')
+  ].join(' · ')
 
-  const maneuverLine1 = `${arrow}  ${metersToDisplay(state.distanceToNextManeuver)}`
-  const maneuverLine2 = street
-  const maneuver = `${maneuverLine1}\n${maneuverLine2}`
-
+  let maneuver: string
   let thenNext = ''
-  if (state.nextStep) {
-    const a2 = arrowFor(state.nextStep.maneuver.type, state.nextStep.maneuver.modifier)
-    const s2 = truncate(state.nextStep.name || state.nextStep.maneuver.instruction, 30)
-    thenNext = `then ${a2}  ${s2}`
+
+  if (currentStep.transitInfo) {
+    const t = currentStep.transitInfo
+    const icon = transitIcon(t.mode)
+
+    if (currentStep.maneuver.type === 'board') {
+      const line1 = `${icon}  ${truncate(t.lineName, 22)}`
+      const line2 = t.direction ? `towards ${truncate(t.direction, 24)}` : `board at ${truncate(t.fromStop, 22)}`
+      maneuver = `${line1}\n${line2}`
+      if (t.stops && t.stops.length > 0) {
+        const stopCount = t.stops.length
+        thenNext = `alight at ${truncate(t.toStop, 20)} (${stopCount} stop${stopCount !== 1 ? 's' : ''})`
+      } else {
+        thenNext = `alight at ${truncate(t.toStop, 28)}`
+      }
+    } else {
+      // alight
+      const dist = metersToDisplay(state.distanceToNextManeuver)
+      maneuver = `◎  ${truncate(t.toStop, 26)}\n${dist}`
+    }
+  } else {
+    const arrow = arrowFor(currentStep.maneuver.type, currentStep.maneuver.modifier)
+    const street = truncate(currentStep.name || currentStep.maneuver.instruction, 28)
+    const dist = metersToDisplay(state.distanceToNextManeuver)
+    maneuver = `${arrow}  ${dist}\n${street}`
+  }
+
+  if (!thenNext && nextStep) {
+    if (nextStep.transitInfo && nextStep.maneuver.type === 'board') {
+      const t = nextStep.transitInfo
+      const icon = transitIcon(t.mode)
+      thenNext = `then ${icon}  ${truncate(t.lineName, 22)}`
+    } else if (!nextStep.transitInfo) {
+      const a2 = arrowFor(nextStep.maneuver.type, nextStep.maneuver.modifier)
+      const s2 = truncate(nextStep.name || nextStep.maneuver.instruction, 30)
+      thenNext = `then ${a2}  ${s2}`
+    }
   }
 
   return { header, maneuver, thennext: thenNext }

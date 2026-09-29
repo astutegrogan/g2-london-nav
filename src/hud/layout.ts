@@ -28,7 +28,7 @@ export const TEXT_ZONES: TextZone[] = [
     y: 0,
     w: DISPLAY_W,
     h: 32,
-    initial: 'Car Nav',
+    initial: 'London Nav',
     capture: false,
   },
   {

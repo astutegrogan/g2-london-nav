@@ -2,7 +2,7 @@ import { GlassesSurface } from './sdk'
 import { TEXT_ZONES, IMAGE_ZONES, MAP_W, MAP_H } from './hud/layout'
 import { HudLoop } from './hud/render'
 import { pickGpsSource, classifyGeoError, type Fix, type GpsSource } from './gps'
-import { getDirections } from './routing/mapbox'
+import { getJourney } from './routing/tfl'
 import { RouteTracker, type TrackerState } from './routing/tracker'
 import { SearchScreen } from './ui/search'
 import { PreviewScreen, setScreen } from './ui/preview'
@@ -58,7 +58,7 @@ class App {
 
     document.getElementById('cancel-btn')!.addEventListener('click', () => this.endNav())
 
-    this.hud.showMessage('Pick a destination on your phone.', 'Car Nav', '')
+    this.hud.showMessage('Pick a destination on your phone.', 'London Nav', '')
   }
 
   private onFix(fix: Fix) {
@@ -99,7 +99,7 @@ class App {
     }
     const from: LngLat = [this.lastFix.lng, this.lastFix.lat]
     try {
-      this.route = await getDirections(from, dest.center)
+      this.route = await getJourney(from, dest.center)
       this.destination = dest
       const screen = document.getElementById('screen-preview')!
       const preview = new PreviewScreen(screen, {
@@ -144,7 +144,7 @@ class App {
     this.unbindGlassesInput?.()
     this.unbindGlassesInput = null
     setScreen('search')
-    this.hud.showMessage('Pick a destination on your phone.', 'Car Nav', '')
+    this.hud.showMessage('Pick a destination on your phone.', 'London Nav', '')
   }
 
   private handleArrived() {
@@ -157,7 +157,7 @@ class App {
     this.rerouting = true
     try {
       const from: LngLat = [this.lastFix.lng, this.lastFix.lat]
-      const r = await getDirections(from, this.destination.center)
+      const r = await getJourney(from, this.destination.center)
       this.route = r
       this.tracker?.setRoute(r)
     } catch (e) {

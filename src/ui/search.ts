@@ -1,4 +1,4 @@
-import { geocode } from '../routing/mapbox'
+import { geocode } from '../routing/tfl'
 import type { GeocodeResult, LngLat } from '../routing/types'
 
 export interface SearchHandlers {

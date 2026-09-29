@@ -1,9 +1,22 @@
 export type LngLat = [number, number]
 
+export type TransitMode =
+  | 'walking'
+  | 'tube'
+  | 'bus'
+  | 'overground'
+  | 'elizabeth-line'
+  | 'dlr'
+  | 'national-rail'
+  | 'river-bus'
+  | 'cable-car'
+
 export type ManeuverType =
   | 'turn'
   | 'depart'
   | 'arrive'
+  | 'board'
+  | 'alight'
   | 'merge'
   | 'on ramp'
   | 'off ramp'
@@ -27,6 +40,16 @@ export type ManeuverModifier =
   | 'left'
   | 'sharp left'
 
+export interface TransitInfo {
+  mode: TransitMode
+  lineName: string
+  direction: string
+  fromStop: string
+  toStop: string
+  platform?: string
+  stops?: string[]
+}
+
 export interface Step {
   distance: number
   duration: number
@@ -40,6 +63,7 @@ export interface Step {
     bearing_after?: number
     bearing_before?: number
   }
+  transitInfo?: TransitInfo
   bannerInstructions?: BannerInstruction[]
   voiceInstructions?: VoiceInstruction[]
 }
@@ -60,7 +84,6 @@ export interface Leg {
   distance: number
   duration: number
   steps: Step[]
-  annotation?: { maxspeed?: ({ speed: number; unit: 'km/h' | 'mph' } | { none: true } | { unknown: true })[] }
   geometry: { coordinates: LngLat[]; type: 'LineString' }
 }
 

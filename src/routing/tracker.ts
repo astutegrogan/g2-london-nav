@@ -9,14 +9,17 @@ export interface TrackerState {
   durationRemaining: number
   currentStep: Step
   nextStep: Step | null
-  speedLimitMph: number | null
   offRouteSeconds: number
   arrived: boolean
 }
 
-const OFFROUTE_THRESHOLD_M = 30
-const REROUTE_AFTER_SECONDS = 5
-const ARRIVAL_THRESHOLD_M = 25
+const WALK_OFFROUTE_THRESHOLD_M = 40
+const REROUTE_AFTER_SECONDS = 8
+const ARRIVAL_THRESHOLD_M = 30
+
+function isTransitStep(step: Step): boolean {
+  return step.maneuver.type === 'board' || step.maneuver.type === 'alight'
+}
 
 export class RouteTracker {
   private legIndex = 0
@@ -40,8 +43,7 @@ export class RouteTracker {
 
     while (this.stepIndex < leg.steps.length - 1) {
       const cur = leg.steps[this.stepIndex]
-      const advance = projectAndAdvance(here, cur)
-      if (advance.passedManeuver) this.stepIndex++
+      if (projectAndAdvance(here, cur)) this.stepIndex++
       else break
     }
 
@@ -49,9 +51,14 @@ export class RouteTracker {
     const nextStep = leg.steps[this.stepIndex + 1] ?? null
     const distToManeuver = distanceMeters(here, currentStep.maneuver.location)
 
-    const polyDist = perpendicularDistance(here, currentStep.geometry.coordinates)
-    if (polyDist > OFFROUTE_THRESHOLD_M) {
-      if (this.offRouteSince === null) this.offRouteSince = fix.timestamp
+    // Only flag off-route on walking steps
+    if (!isTransitStep(currentStep)) {
+      const polyDist = perpendicularDistance(here, currentStep.geometry.coordinates)
+      if (polyDist > WALK_OFFROUTE_THRESHOLD_M) {
+        if (this.offRouteSince === null) this.offRouteSince = fix.timestamp
+      } else {
+        this.offRouteSince = null
+      }
     } else {
       this.offRouteSince = null
     }
@@ -65,7 +72,6 @@ export class RouteTracker {
       durationRemaining += leg.steps[i].duration
     }
 
-    const speedLimitMph = lookupSpeedLimit(here, leg)
     const arrived =
       this.stepIndex === leg.steps.length - 1 &&
       distToManeuver < ARRIVAL_THRESHOLD_M
@@ -78,14 +84,14 @@ export class RouteTracker {
       durationRemaining,
       currentStep,
       nextStep,
-      speedLimitMph,
       offRouteSeconds,
       arrived,
     }
   }
 
   shouldReroute(state: TrackerState): boolean {
-    return state.offRouteSeconds >= REROUTE_AFTER_SECONDS
+    // Only reroute on walking legs that are off-route
+    return !isTransitStep(state.currentStep) && state.offRouteSeconds >= REROUTE_AFTER_SECONDS
   }
 
   lastPosition(): Fix | null {
@@ -93,31 +99,9 @@ export class RouteTracker {
   }
 }
 
-function projectAndAdvance(here: LngLat, step: Step): { passedManeuver: boolean } {
-  const target = step.maneuver.location
-  const d = distanceMeters(here, target)
-  return { passedManeuver: d < ARRIVAL_THRESHOLD_M }
-}
-
-function lookupSpeedLimit(here: LngLat, leg: { annotation?: { maxspeed?: any[] }; geometry: { coordinates: LngLat[] } }): number | null {
-  const ms = leg.annotation?.maxspeed
-  if (!ms || ms.length === 0) return null
-  let best = 0
-  let bestDist = Infinity
-  for (let i = 0; i < leg.geometry.coordinates.length; i++) {
-    const d = distanceMeters(here, leg.geometry.coordinates[i])
-    if (d < bestDist) {
-      bestDist = d
-      best = i
-    }
-  }
-  const segIdx = Math.min(Math.max(best - 1, 0), ms.length - 1)
-  const entry = ms[segIdx]
-  if (!entry) return null
-  if (entry.unknown || entry.none) return null
-  if (entry.speed == null) return null
-  if (entry.unit === 'km/h') return Math.round(entry.speed * 0.621371)
-  return Math.round(entry.speed)
+function projectAndAdvance(here: LngLat, step: Step): boolean {
+  const d = distanceMeters(here, step.maneuver.location)
+  return d < ARRIVAL_THRESHOLD_M
 }
 
 function distanceMeters(a: LngLat, b: LngLat): number {
@@ -132,11 +116,12 @@ function distanceMeters(a: LngLat, b: LngLat): number {
 }
 
 function perpendicularDistance(here: LngLat, line: LngLat[]): number {
+  if (line.length === 0) return Infinity
+  if (line.length === 1) return distanceMeters(here, line[0])
   let best = Infinity
   for (let i = 0; i < line.length - 1; i++) {
     best = Math.min(best, segDist(here, line[i], line[i + 1]))
   }
-  if (line.length === 1) best = distanceMeters(here, line[0])
   return best
 }
 
